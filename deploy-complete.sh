@@ -2,7 +2,7 @@
 
 # Kompletní deployment script pro MedsTrackingApp 2FA
 # Spusťte jako root: sudo bash deploy-complete.sh
-# Použití: ./deploy-complete.sh [GMAIL_EMAIL] [GMAIL_APP_PASSWORD]
+# Použití: ./deploy-complete.sh
 
 set -e
 
@@ -37,24 +37,7 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
-# Parametry
-GMAIL_EMAIL=${1:-""}
-GMAIL_PASSWORD=${2:-""}
-DOMAIN="api-remeds.matydev.eu"
-VPS_USER="maty"
-APP_DIR="/opt/medstrackingapp"
-
-# Kontrola povinných parametrů
-if [ -z "$GMAIL_EMAIL" ] || [ -z "$GMAIL_PASSWORD" ]; then
-    log_error "Použití: $0 <gmail-email> <gmail-app-password>"
-    log_error "Příklad: $0 your-email@gmail.com your-app-password"
-    exit 1
-fi
-
-log_info "Nastavení:"
-log_info "  Gmail: $GMAIL_EMAIL"
-log_info "  Doména: $DOMAIN"
-log_info "  App directory: $APP_DIR"
+log_info "Načítám konfiguraci z .env souboru..."
 
 # ============================================================================
 # KROK 1: Aktualizace systému a instalace základních balíčků
@@ -173,13 +156,44 @@ npm install
 # ============================================================================
 log_step "9. Nastavení SMTP konfigurace..."
 
+# Kontrola, zda existuje .env soubor
+if [ -f "$APP_DIR/.env" ]; then
+    log_info "Načítám existující .env soubor..."
+    source "$APP_DIR/.env"
+else
+    log_warn "Žádný .env soubor nenalezen. Vytvořím nový s výchozími hodnotami."
+    log_error "Prosím, vytvořte .env soubor s následujícími hodnotami:"
+    log_error "SMTP_USER=your-email@gmail.com"
+    log_error "SMTP_PASS=your-app-password"
+    log_error "API_KEY=your-api-key"
+    log_error "DOMAIN=your-domain.com"
+    log_error "VPS_USER=your-vps-user"
+    log_error "APP_DIR=/path/to/app"
+    exit 1
+fi
+
+# Kontrola povinných hodnot
+if [ -z "$SMTP_USER" ] || [ -z "$SMTP_PASS" ] || [ -z "$API_KEY" ] || [ -z "$DOMAIN" ] || [ -z "$VPS_USER" ] || [ -z "$APP_DIR" ]; then
+    log_error "Chybí povinné hodnoty v .env souboru!"
+    log_error "Potřebné: SMTP_USER, SMTP_PASS, API_KEY, DOMAIN, VPS_USER, APP_DIR"
+    exit 1
+fi
+
+log_info "Nastavení:"
+log_info "  Doména: $DOMAIN"
+log_info "  VPS User: $VPS_USER"
+log_info "  App Directory: $APP_DIR"
+log_info "  SMTP User: ${SMTP_USER:0:10}..."
+log_info "  API Key: ${API_KEY:0:10}..."
+
+# Vytvoření finálního .env souboru
 cat > $APP_DIR/.env << EOF
 # SMTP Configuration
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_SECURE=false
-SMTP_USER=$GMAIL_EMAIL
-SMTP_PASS=$GMAIL_PASSWORD
+SMTP_USER=$SMTP_USER
+SMTP_PASS=$SMTP_PASS
 SMTP_REJECT_UNAUTHORIZED=true
 
 # Server Configuration
@@ -188,6 +202,12 @@ HOST=127.0.0.1
 
 # Security
 NODE_ENV=production
+API_KEY=$API_KEY
+
+# Deployment Configuration
+DOMAIN=$DOMAIN
+VPS_USER=$VPS_USER
+APP_DIR=$APP_DIR
 EOF
 
 chown $VPS_USER:$VPS_USER $APP_DIR/.env
