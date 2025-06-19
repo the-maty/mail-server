@@ -37,7 +37,40 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
-log_info "Načítám konfiguraci z .env souboru..."
+# ============================================================================
+# NAČTENÍ KONFIGURACE Z .ENV
+# ============================================================================
+log_step "Načítám konfiguraci z .env souboru..."
+
+# Kontrola, zda existuje .env soubor
+if [ -f "/opt/medstrackingapp/.env" ]; then
+    log_info "Načítám existující .env soubor..."
+    source "/opt/medstrackingapp/.env"
+else
+    log_error "Žádný .env soubor nenalezen v /opt/medstrackingapp/.env"
+    log_error "Prosím, vytvořte .env soubor s následujícími hodnotami:"
+    log_error "SMTP_USER=your-email@gmail.com"
+    log_error "SMTP_PASS=your-app-password"
+    log_error "API_KEY=your-api-key"
+    log_error "DOMAIN=your-domain.com"
+    log_error "VPS_USER=your-vps-user"
+    log_error "APP_DIR=/path/to/app"
+    exit 1
+fi
+
+# Kontrola povinných hodnot
+if [ -z "$SMTP_USER" ] || [ -z "$SMTP_PASS" ] || [ -z "$API_KEY" ] || [ -z "$DOMAIN" ] || [ -z "$VPS_USER" ] || [ -z "$APP_DIR" ]; then
+    log_error "Chybí povinné hodnoty v .env souboru!"
+    log_error "Potřebné: SMTP_USER, SMTP_PASS, API_KEY, DOMAIN, VPS_USER, APP_DIR"
+    exit 1
+fi
+
+log_info "Nastavení:"
+log_info "  Doména: $DOMAIN"
+log_info "  VPS User: $VPS_USER"
+log_info "  App Directory: $APP_DIR"
+log_info "  SMTP User: ${SMTP_USER:0:10}..."
+log_info "  API Key: ${API_KEY:0:10}..."
 
 # ============================================================================
 # KROK 1: Aktualizace systému a instalace základních balíčků
@@ -148,36 +181,6 @@ npm install
 # KROK 9: Nastavení SMTP konfigurace
 # ============================================================================
 log_step "9. Nastavení SMTP konfigurace..."
-
-# Kontrola, zda existuje .env soubor
-if [ -f "$APP_DIR/.env" ]; then
-    log_info "Načítám existující .env soubor..."
-    source "$APP_DIR/.env"
-else
-    log_warn "Žádný .env soubor nenalezen. Vytvořím nový s výchozími hodnotami."
-    log_error "Prosím, vytvořte .env soubor s následujícími hodnotami:"
-    log_error "SMTP_USER=your-email@gmail.com"
-    log_error "SMTP_PASS=your-app-password"
-    log_error "API_KEY=your-api-key"
-    log_error "DOMAIN=your-domain.com"
-    log_error "VPS_USER=your-vps-user"
-    log_error "APP_DIR=/path/to/app"
-    exit 1
-fi
-
-# Kontrola povinných hodnot
-if [ -z "$SMTP_USER" ] || [ -z "$SMTP_PASS" ] || [ -z "$API_KEY" ] || [ -z "$DOMAIN" ] || [ -z "$VPS_USER" ] || [ -z "$APP_DIR" ]; then
-    log_error "Chybí povinné hodnoty v .env souboru!"
-    log_error "Potřebné: SMTP_USER, SMTP_PASS, API_KEY, DOMAIN, VPS_USER, APP_DIR"
-    exit 1
-fi
-
-log_info "Nastavení:"
-log_info "  Doména: $DOMAIN"
-log_info "  VPS User: $VPS_USER"
-log_info "  App Directory: $APP_DIR"
-log_info "  SMTP User: ${SMTP_USER:0:10}..."
-log_info "  API Key: ${API_KEY:0:10}..."
 
 # Vytvoření finálního .env souboru
 cat > $APP_DIR/.env << EOF
