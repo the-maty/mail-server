@@ -339,22 +339,54 @@ sudo -u $VPS_USER pm2 save
 # ============================================================================
 log_step "13. Testování..."
 
-sleep 5
+# Počkáme déle, aby se aplikace stihla spustit
+log_info "Čekám 10 sekund na spuštění aplikace..."
+sleep 10
 
-# Test health endpoint
-if curl -s https://$DOMAIN/health | grep -q "OK"; then
+# Kontrola, zda PM2 proces běží
+if pm2 list | grep -q "email-server.*online"; then
+    log_info "✅ PM2 proces běží"
+else
+    log_error "❌ PM2 proces neběží!"
+    pm2 list
+    pm2 logs email-server --lines 10
+    exit 1
+fi
+
+# Test health endpoint na správném portu
+log_info "Testuji health endpoint na portu 8443..."
+if curl -s -k https://$DOMAIN:8443/health | grep -q "OK"; then
     log_info "✅ Health check: OK"
 else
     log_warn "⚠️  Health check selhal"
+    log_info "Zkouším HTTP na portu 8080..."
+    if curl -s http://$DOMAIN:8080/health | grep -q "OK"; then
+        log_info "✅ Health check (HTTP): OK"
+    else
+        log_warn "⚠️  Health check selhal i na HTTP"
+        curl -v http://$DOMAIN:8080/health
+    fi
 fi
 
-# Test email endpoint
-if curl -s -X POST https://$DOMAIN/send-email \
+# Test email endpoint na správném portu
+log_info "Testuji email endpoint na portu 8443..."
+if curl -s -k -X POST https://$DOMAIN:8443/send-email \
     -H 'Content-Type: application/json' \
     -d '{"to":"test@example.com","from":"ReMeds","subject":"Deployment Test","code":"123456"}' | grep -q "success"; then
     log_info "✅ Email endpoint: OK"
 else
     log_warn "⚠️  Email endpoint selhal"
+    log_info "Zkouším HTTP na portu 8080..."
+    if curl -s -X POST http://$DOMAIN:8080/send-email \
+        -H 'Content-Type: application/json' \
+        -d '{"to":"test@example.com","from":"ReMeds","subject":"Deployment Test","code":"123456"}' | grep -q "success"; then
+        log_info "✅ Email endpoint (HTTP): OK"
+    else
+        log_warn "⚠️  Email endpoint selhal i na HTTP"
+        curl -v -X POST http://$DOMAIN:8080/send-email \
+            -H 'Content-Type: application/json' \
+            -d '{"to":"test@example.com","from":"ReMeds","subject":"Deployment Test","code":"123456"}'
+    fi
 fi
 
 # ============================================================================
@@ -375,14 +407,14 @@ SERVICES:
 - Certbot: $(certbot --version)
 
 ENDPOINTS:
-- Health: https://$DOMAIN/health
-- Email: https://$DOMAIN/send-email
+- Health: https://$DOMAIN:8443/health
+- Email: https://$DOMAIN:8443/send-email
 
 FIREWALL:
 $(ufw status numbered)
 
 SSL CERTIFICATE:
-$(openssl s_client -connect $DOMAIN:443 -servername $DOMAIN < /dev/null 2>/dev/null | openssl x509 -noout -dates)
+$(openssl s_client -connect $DOMAIN:8443 -servername $DOMAIN < /dev/null 2>/dev/null | openssl x509 -noout -dates)
 
 PM2 PROCESSES:
 $(pm2 list)
@@ -407,9 +439,9 @@ EOF
 # ============================================================================
 log_info "🎉 DEPLOYMENT DOKONČEN!"
 log_info "📋 Report: /root/deployment-report.txt"
-log_info "🌐 URL: https://$DOMAIN"
-log_info "📧 Email server: https://$DOMAIN/send-email"
-log_info "🔍 Health check: https://$DOMAIN/health"
+log_info "🌐 URL: https://$DOMAIN:8443"
+log_info "📧 Email server: https://$DOMAIN:8443/send-email"
+log_info "🔍 Health check: https://$DOMAIN:8443/health"
 
 echo ""
 echo "✅ Všechno je připravené pro iOS aplikaci!"
