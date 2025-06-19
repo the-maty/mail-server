@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const nodemailer = require('nodemailer');
 const cors = require('cors');
+const rateLimit = require('express-rate-limit');
 
 // Načtení SMTP konfigurace z environment variables
 const smtpConfig = {
@@ -17,6 +18,13 @@ const smtpConfig = {
   }
 };
 
+// API Key pro autentifikaci
+const API_KEY = process.env.API_KEY;
+if (!API_KEY) {
+  console.error('❌ Chybí API_KEY v environment variables!');
+  process.exit(1);
+}
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -28,8 +36,47 @@ app.use(express.json());
 // SMTP transporter
 const transporter = nodemailer.createTransport(smtpConfig);
 
-// Email endpoint
-app.post('/send-email', async (req, res) => {
+// Rate Limiting pro 2FA emaily - chytře nastavený pro 5minutové čekání
+const emailLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minut (stejně jako platnost kódu)
+  max: 3, // max 3 požadavky na IP za 5 minut
+  message: {
+    error: 'Příliš mnoho požadavků',
+    message: 'Zkuste to znovu za 5 minut (platnost kódu)',
+    retryAfter: 300 // 5 minut v sekundách
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  // Custom key generator - kombinace IP a emailu pro lepší ochranu
+  keyGenerator: (req) => {
+    const email = req.body.to || 'unknown';
+    return `${req.ip}-${email}`;
+  }
+});
+
+// Middleware pro kontrolu API Key
+const checkApiKey = (req, res, next) => {
+  const apiKey = req.headers['x-api-key'];
+  
+  if (!apiKey) {
+    return res.status(401).json({ 
+      error: 'Chybí API klíč',
+      message: 'Požadavek musí obsahovat X-API-Key header'
+    });
+  }
+  
+  if (apiKey !== API_KEY) {
+    return res.status(401).json({ 
+      error: 'Neplatný API klíč',
+      message: 'Zadaný API klíč není správný'
+    });
+  }
+  
+  next();
+};
+
+// Email endpoint s zabezpečením
+app.post('/send-email', checkApiKey, emailLimiter, async (req, res) => {
   try {
     const { to, from, subject, code } = req.body;
     
@@ -64,7 +111,7 @@ app.post('/send-email', async (req, res) => {
 
     await transporter.sendMail(mailOptions);
     
-    console.log(`✅ Email odeslán na ${to} od ${from || 'systému'}`);
+    console.log(`✅ Email odeslán na ${to} od ${from || 'systému'} (IP: ${req.ip})`);
     res.json({ success: true, message: 'Email odeslán' });
     
   } catch (error) {
@@ -73,7 +120,7 @@ app.post('/send-email', async (req, res) => {
   }
 });
 
-// Health check
+// Health check (bez API Key pro monitoring)
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'OK', 
@@ -82,6 +129,10 @@ app.get('/health', (req, res) => {
       host: smtpConfig.host,
       port: smtpConfig.port,
       user: smtpConfig.auth.user
+    },
+    security: {
+      rateLimitEnabled: true,
+      apiKeyRequired: true
     }
   });
 });
@@ -90,4 +141,6 @@ app.listen(PORT, HOST, () => {
   console.log(`🚀 Email server běží na ${HOST}:${PORT}`);
   console.log(`📧 SMTP: ${smtpConfig.host}:${smtpConfig.port}`);
   console.log(`👤 User: ${smtpConfig.auth.user}`);
+  console.log(`🔐 API Key: ${API_KEY.substring(0, 10)}...`);
+  console.log(`🛡️ Rate Limit: 3 požadavků/5min na IP+email`);
 }); 
