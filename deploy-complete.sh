@@ -112,17 +112,10 @@ EOF
 
 systemctl restart fail2ban
 
-# ============================================================================
+# =========================================================================
 # KROK 6: Vytvoření uživatele a adresářů
-# ============================================================================
-log_step "6. Vytvoření uživatele a adresářů..."
-
-# Vytvoření uživatele pokud neexistuje
-if ! id "$VPS_USER" &>/dev/null; then
-    useradd -m -s /bin/bash $VPS_USER
-    usermod -aG sudo $VPS_USER
-    log_info "Uživatel $VPS_USER vytvořen"
-fi
+# =========================================================================
+log_step "6. Vytvoření adresářů..."
 
 # Vytvoření adresáře pro aplikaci
 mkdir -p $APP_DIR
