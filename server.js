@@ -27,7 +27,7 @@ app.use(cors());
 app.use(express.json());
 
 // SMTP transporter
-const transporter = nodemailer.createTransporter(smtpConfig);
+const transporter = nodemailer.createTransport(smtpConfig);
 
 // Email endpoint
 app.post('/send-email', async (req, res) => {
