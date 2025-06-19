@@ -137,10 +137,12 @@ ufw allow 80/tcp
 ufw allow 443/tcp
 ufw allow 587/tcp
 ufw allow 465/tcp
+ufw allow 8080/tcp
+ufw allow 8443/tcp
 ufw deny 25/tcp
 ufw deny 3000/tcp
 
-log_info "Firewall nastaven"
+log_info "Firewall nastaven - porty 8080 a 8443 otevřené pro Nginx proxy"
 
 # ============================================================================
 # KROK 5: Nastavení fail2ban
