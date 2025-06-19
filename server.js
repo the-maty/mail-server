@@ -31,19 +31,22 @@ const transporter = nodemailer.createTransport(smtpConfig);
 // Email endpoint
 app.post('/send-email', async (req, res) => {
   try {
-    const { to, subject, code } = req.body;
+    const { to, from, subject, code } = req.body;
     
     if (!to || !subject || !code) {
       return res.status(400).json({ error: 'Chybí povinné parametry' });
     }
 
+    // Nastavení odesílatele s názvem nebo bez
+    const fromAddress = from ? `"${from}" <${smtpConfig.auth.user}>` : smtpConfig.auth.user;
+
     const mailOptions = {
-      from: smtpConfig.auth.user,
+      from: fromAddress,
       to: to,
       subject: subject,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #2563eb;">MedsTrackingApp</h2>
+          <h2 style="color: #2563eb;">ReMeds</h2>
           <h3>Váš verifikační kód</h3>
           <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; text-align: center; margin: 20px 0;">
             <span style="font-size: 32px; font-weight: bold; color: #2563eb; letter-spacing: 4px;">${code}</span>
@@ -53,7 +56,7 @@ app.post('/send-email', async (req, res) => {
           <hr style="margin: 30px 0;">
           <p style="color: #6b7280; font-size: 14px;">
             S pozdravem,<br>
-            Tým MedsTrackingApp
+            Tým ReMeds
           </p>
         </div>
       `
@@ -61,7 +64,7 @@ app.post('/send-email', async (req, res) => {
 
     await transporter.sendMail(mailOptions);
     
-    console.log(`✅ Email odeslán na ${to}`);
+    console.log(`✅ Email odeslán na ${to} od ${from || 'systému'}`);
     res.json({ success: true, message: 'Email odeslán' });
     
   } catch (error) {
