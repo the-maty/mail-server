@@ -249,7 +249,7 @@ log_step "11. Instalace SSL certifikátu..."
 apt install -y certbot python3-certbot-nginx
 
 # Získání SSL certifikátu (certbot automaticky upraví konfiguraci na HTTPS)
-certbot --nginx -d $DOMAIN --non-interactive --agree-tos --email $GMAIL_EMAIL
+certbot --nginx -d $DOMAIN --non-interactive --agree-tos --email $SMTP_USER
 
 # Otestování finální konfigurace
 nginx -t && systemctl reload nginx
