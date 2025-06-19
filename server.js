@@ -6,17 +6,24 @@ const rateLimit = require('express-rate-limit');
 
 // Načtení SMTP konfigurace z environment variables
 const smtpConfig = {
-  host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: parseInt(process.env.SMTP_PORT) || 587,
+  host: process.env.SMTP_HOST,
+  port: process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : 587,
   secure: process.env.SMTP_SECURE === 'true',
   auth: {
-    user: process.env.SMTP_USER || 'medstrackingapp@gmail.com',
-    pass: process.env.SMTP_PASS || 'qgda vvzf zqit synt'
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS
   },
   tls: {
     rejectUnauthorized: process.env.SMTP_REJECT_UNAUTHORIZED !== 'false'
   }
 };
+
+// Kontrola povinných SMTP údajů
+if (!smtpConfig.host || !smtpConfig.auth.user || !smtpConfig.auth.pass) {
+  console.error('❌ Chybí povinné SMTP údaje v environment variables!');
+  console.error('Potřebné: SMTP_HOST, SMTP_USER, SMTP_PASS');
+  process.exit(1);
+}
 
 // API Key pro autentifikaci
 const API_KEY = process.env.API_KEY;
