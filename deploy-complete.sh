@@ -1,5 +1,32 @@
 #!/bin/bash
 
+# ============================================================================
+# DEPLOYMENT SCRIPT PRO MAIL SERVER NA HETZNER VPS
+# ============================================================================
+# 
+# Tento script nasadí Node.js mail server na Hetzner VPS s:
+# - Nginx reverse proxy na portech 8080/8443
+# - SSL certifikát od Let's Encrypt
+# - PM2 process manager
+# - Automatické restartování
+#
+# ⚠️  DŮLEŽITÉ: Nezapomeňte otevřít porty 8080 a 8443 v Hetzner firewall!
+#    - Port 8080: HTTP pro certbot a redirect
+#    - Port 8443: HTTPS pro mail server
+#    - Port 22: SSH (už otevřený)
+#    - Porty 80 a 443 zůstávají volné pro Pangolin
+#
+# Použití: ./deploy-complete.sh
+# ============================================================================
+
+# Načtení konfigurace z .env souboru
+if [ -f .env ]; then
+    export $(cat .env | grep -v '^#' | xargs)
+else
+    echo "❌ Soubor .env neexistuje! Vytvořte ho podle env.example"
+    exit 1
+fi
+
 # Kompletní deployment script pro MedsTrackingApp 2FA
 # Spusťte jako root: sudo bash deploy-complete.sh
 # Použití: ./deploy-complete.sh
@@ -217,8 +244,13 @@ log_step "10. Nastavení Nginx..."
 # Vytvoření základní HTTP Nginx konfigurace (pro certbot)
 cat > /etc/nginx/sites-available/medstrackingapp << EOF
 server {
-    listen 80;
+    listen 8080;
     server_name $DOMAIN;
+    
+    # Webroot pro certbot
+    location /.well-known/acme-challenge/ {
+        root /var/www/html;
+    }
     
     location / {
         proxy_pass http://localhost:3000;
@@ -234,11 +266,56 @@ server {
 }
 EOF
 
-# Aktivace Nginx site
+# Aktivace Nginx site pro certbot
 ln -sf /etc/nginx/sites-available/medstrackingapp /etc/nginx/sites-enabled/
 rm -f /etc/nginx/sites-enabled/default
+nginx -t && systemctl reload nginx
 
-# Test a restart Nginx
+# Získání SSL certifikátu (použijeme webroot, protože port 80 uvolňujeme pro Pangolin)
+certbot certonly --webroot -w /var/www/html -d $DOMAIN --non-interactive --agree-tos --email $SMTP_USER
+
+# Aktualizace Nginx konfigurace pro HTTPS na portu 8443
+cat > /etc/nginx/sites-available/medstrackingapp << EOF
+server {
+    listen 8080;
+    server_name $DOMAIN;
+    return 301 https://\$server_name:8443\$request_uri;
+}
+
+server {
+    listen 8443 ssl http2;
+    server_name $DOMAIN;
+
+    ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-RSA-AES256-GCM-SHA512:DHE-RSA-AES256-GCM-SHA512:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+
+    # Security headers
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Frame-Options DENY always;
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_cache_bypass \$http_upgrade;
+    }
+}
+EOF
+
+# Otestování finální konfigurace
 nginx -t && systemctl reload nginx
 
 # ============================================================================
@@ -247,12 +324,6 @@ nginx -t && systemctl reload nginx
 log_step "11. Instalace SSL certifikátu..."
 
 apt install -y certbot python3-certbot-nginx
-
-# Získání SSL certifikátu (certbot automaticky upraví konfiguraci na HTTPS)
-certbot --nginx -d $DOMAIN --non-interactive --agree-tos --email $SMTP_USER
-
-# Otestování finální konfigurace
-nginx -t && systemctl reload nginx
 
 # ============================================================================
 # KROK 12: Spuštění email serveru
@@ -341,14 +412,16 @@ log_info "📧 Email server: https://$DOMAIN/send-email"
 log_info "🔍 Health check: https://$DOMAIN/health"
 
 echo ""
-echo "=== PŘÍKAZY PRO SPRÁVU ==="
-echo "🔍 Status: pm2 status"
-echo "📊 Logy: pm2 logs email-server"
-echo "🔄 Restart: pm2 restart email-server"
-echo "📋 Report: cat /root/deployment-report.txt"
+echo "✅ Všechno je připravené pro iOS aplikaci!"
 echo ""
-echo "=== iOS APLIKACE ==="
-echo "URL: https://$DOMAIN/send-email"
-echo "HTTPS: povinné"
+echo "🌐 Mail server běží na: https://$DOMAIN:8443"
+echo "📧 Test email endpointu: curl -X POST https://$DOMAIN:8443/send-email"
+echo "💚 Test health endpointu: curl https://$DOMAIN:8443/health"
 echo ""
-echo "✅ Všechno je připravené pro iOS aplikaci!" 
+echo "🔧 Pro správu PM2 procesů:"
+echo "   pm2 list          - zobrazí všechny procesy"
+echo "   pm2 restart all   - restartuje všechny procesy"
+echo "   pm2 logs          - zobrazí logy"
+echo "   pm2 monit         - monitorování v reálném čase"
+echo ""
+echo "🎉 Deployment dokončen!" 
