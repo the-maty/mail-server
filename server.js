@@ -21,6 +21,7 @@ try {
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const HOST = process.env.HOST || '0.0.0.0';
 
 // Middleware
 app.use(cors());
@@ -84,8 +85,8 @@ app.get('/health', (req, res) => {
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 Email server běží na portu ${PORT}`);
+app.listen(PORT, HOST, () => {
+  console.log(`🚀 Email server běží na ${HOST}:${PORT}`);
   console.log(`📧 SMTP: ${smtpConfig.host}:${smtpConfig.port}`);
   console.log(`👤 User: ${smtpConfig.auth.user}`);
 }); 
