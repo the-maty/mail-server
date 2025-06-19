@@ -40,7 +40,7 @@ fi
 # Parametry
 GMAIL_EMAIL=${1:-""}
 GMAIL_PASSWORD=${2:-""}
-DOMAIN="medstrackingapp.havlik.eu"
+DOMAIN="api-remeds.matydev.eu"
 VPS_USER="maty"
 APP_DIR="/opt/medstrackingapp"
 
@@ -198,48 +198,8 @@ chmod 600 $APP_DIR/.env
 # ============================================================================
 log_step "10. Nastavení Nginx..."
 
+# Vytvoření základní Nginx konfigurace
 cat > /etc/nginx/sites-available/medstrackingapp << EOF
-server {
-    listen 80;
-    server_name $DOMAIN;
-
-    location / {
-        proxy_pass http://localhost:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_cache_bypass \$http_upgrade;
-    }
-}
-EOF
-
-# Aktivace Nginx site
-ln -sf /etc/nginx/sites-available/medstrackingapp /etc/nginx/sites-enabled/
-rm -f /etc/nginx/sites-enabled/default
-systemctl restart nginx
-
-# ============================================================================
-# KROK 11: Instalace Certbot a SSL
-# ============================================================================
-log_step "11. Instalace SSL certifikátu..."
-
-apt install -y certbot python3-certbot-nginx
-
-# Získání SSL certifikátu
-certbot --nginx -d $DOMAIN --non-interactive --agree-tos --email $GMAIL_EMAIL
-
-# Aktualizace Nginx konfigurace pro HTTPS
-cat > /etc/nginx/sites-available/medstrackingapp << EOF
-server {
-    listen 80;
-    server_name $DOMAIN;
-    return 301 https://\$server_name\$request_uri;
-}
-
 server {
     listen 443 ssl http2;
     server_name $DOMAIN;
@@ -273,6 +233,21 @@ server {
 }
 EOF
 
+# Aktivace Nginx site
+ln -sf /etc/nginx/sites-available/medstrackingapp /etc/nginx/sites-enabled/
+rm -f /etc/nginx/sites-enabled/default
+
+# ============================================================================
+# KROK 11: Instalace Certbot a SSL
+# ============================================================================
+log_step "11. Instalace SSL certifikátu..."
+
+apt install -y certbot python3-certbot-nginx
+
+# Získání SSL certifikátu
+certbot --nginx -d $DOMAIN --non-interactive --agree-tos --email $GMAIL_EMAIL
+
+# Otestování a restart Nginx
 nginx -t && systemctl reload nginx
 
 # ============================================================================
@@ -301,7 +276,7 @@ fi
 # Test email endpoint
 if curl -s -X POST https://$DOMAIN/send-email \
     -H 'Content-Type: application/json' \
-    -d '{"to":"test@example.com","subject":"Deployment Test","code":"123456"}' | grep -q "success"; then
+    -d '{"to":"test@example.com","from":"ReMeds","subject":"Deployment Test","code":"123456"}' | grep -q "success"; then
     log_info "✅ Email endpoint: OK"
 else
     log_warn "⚠️  Email endpoint selhal"
