@@ -1,23 +1,21 @@
+require('dotenv').config();
 const express = require('express');
 const nodemailer = require('nodemailer');
 const cors = require('cors');
 
-// Načtení SMTP konfigurace
-let smtpConfig;
-try {
-  smtpConfig = require('./smtp-config.js');
-} catch (error) {
-  console.log('⚠️  SMTP config not found, using default configuration');
-  smtpConfig = {
-    host: 'localhost',
-    port: 587,
-    secure: false,
-    auth: {
-      user: 'noreply@medstrackingapp.havlik.eu',
-      pass: 'your-smtp-password-here'
-    }
-  };
-}
+// Načtení SMTP konfigurace z environment variables
+const smtpConfig = {
+  host: process.env.SMTP_HOST || 'smtp.gmail.com',
+  port: parseInt(process.env.SMTP_PORT) || 587,
+  secure: process.env.SMTP_SECURE === 'true',
+  auth: {
+    user: process.env.SMTP_USER || 'medstrackingapp@gmail.com',
+    pass: process.env.SMTP_PASS || 'qgda vvzf zqit synt'
+  },
+  tls: {
+    rejectUnauthorized: process.env.SMTP_REJECT_UNAUTHORIZED !== 'false'
+  }
+};
 
 const app = express();
 const PORT = process.env.PORT || 3000;
