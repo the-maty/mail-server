@@ -47,7 +47,7 @@ APP_DIR="/opt/medstrackingapp"
 # Kontrola povinných parametrů
 if [ -z "$GMAIL_EMAIL" ] || [ -z "$GMAIL_PASSWORD" ]; then
     log_error "Použití: $0 <gmail-email> <gmail-app-password>"
-    log_error "Příklad: $0 medstrackingapp@gmail.com your-app-password"
+    log_error "Příklad: $0 your-email@gmail.com your-app-password"
     exit 1
 fi
 
@@ -198,27 +198,12 @@ chmod 600 $APP_DIR/.env
 # ============================================================================
 log_step "10. Nastavení Nginx..."
 
-# Vytvoření základní Nginx konfigurace
+# Vytvoření základní HTTP Nginx konfigurace (pro certbot)
 cat > /etc/nginx/sites-available/medstrackingapp << EOF
 server {
-    listen 443 ssl http2;
+    listen 80;
     server_name $DOMAIN;
-
-    ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers ECDHE-RSA-AES256-GCM-SHA512:DHE-RSA-AES256-GCM-SHA512:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384;
-    ssl_prefer_server_ciphers off;
-    ssl_session_cache shared:SSL:10m;
-    ssl_session_timeout 10m;
-
-    # Security headers
-    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
-    add_header X-Frame-Options DENY always;
-    add_header X-Content-Type-Options nosniff always;
-    add_header X-XSS-Protection "1; mode=block" always;
-    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-
+    
     location / {
         proxy_pass http://localhost:3000;
         proxy_http_version 1.1;
@@ -237,6 +222,9 @@ EOF
 ln -sf /etc/nginx/sites-available/medstrackingapp /etc/nginx/sites-enabled/
 rm -f /etc/nginx/sites-enabled/default
 
+# Test a restart Nginx
+nginx -t && systemctl reload nginx
+
 # ============================================================================
 # KROK 11: Instalace Certbot a SSL
 # ============================================================================
@@ -244,10 +232,10 @@ log_step "11. Instalace SSL certifikátu..."
 
 apt install -y certbot python3-certbot-nginx
 
-# Získání SSL certifikátu
+# Získání SSL certifikátu (certbot automaticky upraví konfiguraci na HTTPS)
 certbot --nginx -d $DOMAIN --non-interactive --agree-tos --email $GMAIL_EMAIL
 
-# Otestování a restart Nginx
+# Otestování finální konfigurace
 nginx -t && systemctl reload nginx
 
 # ============================================================================
