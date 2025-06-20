@@ -72,7 +72,7 @@ transporter.verify((error, success) => {
 // Rate Limiting pro 2FA emaily - chytře nastavený pro 5minutové čekání
 const emailLimiter = rateLimit({
   windowMs: 5 * 60 * 1000, // 5 minut (stejně jako platnost kódu)
-  max: 3, // max 3 požadavky na IP za 5 minut
+  max: 5, // max 5 požadavků na IP za 5 minut
   message: {
     error: 'Příliš mnoho požadavků',
     message: 'Zkuste to znovu za 5 minut (platnost kódu)',
@@ -237,7 +237,7 @@ app.listen(PORT, HOST, () => {
   console.log(`📧 SMTP: ${smtpConfig.host}:${smtpConfig.port}`);
   console.log(`👤 User: ${smtpConfig.auth.user}`);
   console.log(`🔐 API Key: ${API_KEY.substring(0, 10)}...`);
-  console.log(`🛡️ Rate Limit: 3 požadavků/5min na IP+email`);
+  console.log(`🛡️ Rate Limit: 5 požadavků/5min na IP+email`);
   
   if (TRAFFIC_PROTECTION.enabled) {
     console.log(`🛡️ Traffic Protection: POVOLENO`);

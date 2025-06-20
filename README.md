@@ -6,7 +6,7 @@ Bezpečný Node.js email server pro 2FA verifikaci v ReMeds aplikaci.
 
 - ✅ **SMTP email odesílání** s Gmail podporou
 - ✅ **API Key autentifikace** pro zabezpečení
-- ✅ **Rate limiting** - 3 požadavky na IP+email za 5 minut
+- ✅ **Rate limiting** - 5 požadavků na IP+email za 5 minut
 - ✅ **CORS podpora** pro cross-origin požadavky
 - ✅ **Health check endpoint** pro monitoring
 - ✅ **Bezpečnostní headers** a ochrana proti útokům
@@ -138,7 +138,7 @@ Content-Type: application/json
 }
 ```
 
-**Rate Limiting:** 3 požadavky na kombinaci IP+email za 5 minut
+**Rate Limiting:** 5 požadavků na kombinaci IP+email za 5 minut
 
 **Response:**
 ```json
@@ -327,7 +327,7 @@ curl https://api.yourdomain.com/health | jq '.smtp'
    - Používejte bezpečný náhodný klíč
 
 3. **"Příliš mnoho požadavků"**
-   - Rate limit: 3 požadavky/5min na IP+email
+   - Rate limit: 5 požadavků/5min na IP+email
    - Počkejte 5 minut nebo změňte IP
 
 4. **"Neplatný API klíč"**
