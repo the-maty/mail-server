@@ -58,7 +58,7 @@ app.use(cors());
 app.use(express.json({ limit: '1mb' })); // Limit velikosti requestu
 
 // SMTP transporter s connection pooling
-const transporter = nodemailer.createTransporter(smtpConfig);
+const transporter = nodemailer.createTransport(smtpConfig);
 
 // Verifikace SMTP připojení
 transporter.verify((error, success) => {
