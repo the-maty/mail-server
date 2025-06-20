@@ -255,7 +255,7 @@ server {
     }
     
     location / {
-        proxy_pass http://localhost:3000;
+        proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -304,7 +304,7 @@ server {
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
 
     location / {
-        proxy_pass http://localhost:3000;
+        proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -374,6 +374,7 @@ fi
 log_info "Testuji email endpoint na portu 8443..."
 if curl -s -k -X POST https://$DOMAIN:8443/send-email \
     -H 'Content-Type: application/json' \
+    -H "X-API-Key: $API_KEY" \
     -d '{"to":"test@example.com","from":"ReMeds","subject":"Deployment Test","code":"123456"}' | grep -q "success"; then
     log_info "✅ Email endpoint: OK"
 else
@@ -381,12 +382,14 @@ else
     log_info "Zkouším HTTP na portu 8080..."
     if curl -s -X POST http://$DOMAIN:8080/send-email \
         -H 'Content-Type: application/json' \
+        -H "X-API-Key: $API_KEY" \
         -d '{"to":"test@example.com","from":"ReMeds","subject":"Deployment Test","code":"123456"}' | grep -q "success"; then
         log_info "✅ Email endpoint (HTTP): OK"
     else
         log_warn "⚠️  Email endpoint selhal i na HTTP"
         curl -v -X POST http://$DOMAIN:8080/send-email \
             -H 'Content-Type: application/json' \
+            -H "X-API-Key: $API_KEY" \
             -d '{"to":"test@example.com","from":"ReMeds","subject":"Deployment Test","code":"123456"}'
     fi
 fi
