@@ -15,7 +15,13 @@ const smtpConfig = {
   },
   tls: {
     rejectUnauthorized: process.env.SMTP_REJECT_UNAUTHORIZED !== 'false'
-  }
+  },
+  // Connection pooling pro lepší výkon
+  pool: process.env.SMTP_POOL === 'true',
+  maxConnections: process.env.SMTP_MAX_CONNECTIONS ? parseInt(process.env.SMTP_MAX_CONNECTIONS) : 5,
+  maxMessages: process.env.SMTP_MAX_MESSAGES ? parseInt(process.env.SMTP_MAX_MESSAGES) : 100,
+  rateLimit: process.env.SMTP_RATE_LIMIT ? parseInt(process.env.SMTP_RATE_LIMIT) : 20, // Gmail limit
+  rateDelta: process.env.SMTP_RATE_DELTA ? parseInt(process.env.SMTP_RATE_DELTA) : 1000 // 1 sekunda
 };
 
 // Kontrola povinných SMTP údajů
@@ -36,12 +42,32 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
 
+// Traffic protection nastavení
+const TRAFFIC_PROTECTION = {
+  enabled: process.env.TRAFFIC_PROTECTION === 'true',
+  maxConcurrentRequests: process.env.MAX_CONCURRENT_REQUESTS ? parseInt(process.env.MAX_CONCURRENT_REQUESTS) : 10,
+  requestTimeout: process.env.REQUEST_TIMEOUT ? parseInt(process.env.REQUEST_TIMEOUT) : 30000, // 30s
+  retryAttempts: process.env.RETRY_ATTEMPTS ? parseInt(process.env.RETRY_ATTEMPTS) : 3,
+  retryDelay: process.env.RETRY_DELAY ? parseInt(process.env.RETRY_DELAY) : 1000, // 1s
+  throttleEnabled: process.env.THROTTLE_ENABLED === 'true',
+  throttleDelay: process.env.THROTTLE_DELAY ? parseInt(process.env.THROTTLE_DELAY) : 100 // 100ms
+};
+
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '1mb' })); // Limit velikosti requestu
 
-// SMTP transporter
-const transporter = nodemailer.createTransport(smtpConfig);
+// SMTP transporter s connection pooling
+const transporter = nodemailer.createTransporter(smtpConfig);
+
+// Verifikace SMTP připojení
+transporter.verify((error, success) => {
+  if (error) {
+    console.error('❌ SMTP připojení selhalo:', error);
+  } else {
+    console.log('✅ SMTP server připraven');
+  }
+});
 
 // Rate Limiting pro 2FA emaily - chytře nastavený pro 5minutové čekání
 const emailLimiter = rateLimit({
@@ -60,6 +86,49 @@ const emailLimiter = rateLimit({
     return `${req.ip}-${email}`;
   }
 });
+
+// Traffic protection middleware
+let activeRequests = 0;
+const trafficProtection = (req, res, next) => {
+  if (!TRAFFIC_PROTECTION.enabled) {
+    return next();
+  }
+
+  // Kontrola počtu současných požadavků
+  if (activeRequests >= TRAFFIC_PROTECTION.maxConcurrentRequests) {
+    return res.status(429).json({
+      error: 'Server je přetížený',
+      message: 'Zkuste to znovu za chvíli',
+      retryAfter: 5
+    });
+  }
+
+  activeRequests++;
+  
+  // Timeout pro požadavek
+  const timeout = setTimeout(() => {
+    activeRequests--;
+    if (!res.headersSent) {
+      res.status(408).json({
+        error: 'Timeout',
+        message: 'Požadavek trval příliš dlouho'
+      });
+    }
+  }, TRAFFIC_PROTECTION.requestTimeout);
+
+  // Cleanup při dokončení
+  res.on('finish', () => {
+    clearTimeout(timeout);
+    activeRequests--;
+  });
+
+  // Throttling (zpomalení)
+  if (TRAFFIC_PROTECTION.throttleEnabled) {
+    setTimeout(next, TRAFFIC_PROTECTION.throttleDelay);
+  } else {
+    next();
+  }
+};
 
 // Middleware pro kontrolu API Key
 const checkApiKey = (req, res, next) => {
@@ -82,8 +151,22 @@ const checkApiKey = (req, res, next) => {
   next();
 };
 
+// Retry mechanismus pro SMTP
+const sendEmailWithRetry = async (mailOptions, attempts = 0) => {
+  try {
+    return await transporter.sendMail(mailOptions);
+  } catch (error) {
+    if (attempts < TRAFFIC_PROTECTION.retryAttempts) {
+      console.log(`⚠️ SMTP selhal, opakuji za ${TRAFFIC_PROTECTION.retryDelay}ms (pokus ${attempts + 1}/${TRAFFIC_PROTECTION.retryAttempts})`);
+      await new Promise(resolve => setTimeout(resolve, TRAFFIC_PROTECTION.retryDelay));
+      return sendEmailWithRetry(mailOptions, attempts + 1);
+    }
+    throw error;
+  }
+};
+
 // Email endpoint s zabezpečením
-app.post('/send-email', checkApiKey, emailLimiter, async (req, res) => {
+app.post('/send-email', checkApiKey, emailLimiter, trafficProtection, async (req, res) => {
   try {
     const { to, from, subject, code } = req.body;
     
@@ -116,7 +199,7 @@ app.post('/send-email', checkApiKey, emailLimiter, async (req, res) => {
       `
     };
 
-    await transporter.sendMail(mailOptions);
+    await sendEmailWithRetry(mailOptions);
     
     console.log(`✅ Email odeslán na ${to} od ${from || 'systému'} (IP: ${req.ip})`);
     res.json({ success: true, message: 'Email odeslán' });
@@ -135,11 +218,16 @@ app.get('/health', (req, res) => {
     smtp: {
       host: smtpConfig.host,
       port: smtpConfig.port,
-      user: smtpConfig.auth.user
+      user: smtpConfig.auth.user,
+      pool: smtpConfig.pool,
+      maxConnections: smtpConfig.maxConnections
     },
     security: {
       rateLimitEnabled: true,
-      apiKeyRequired: true
+      apiKeyRequired: true,
+      trafficProtection: TRAFFIC_PROTECTION.enabled,
+      activeRequests: activeRequests,
+      maxConcurrentRequests: TRAFFIC_PROTECTION.maxConcurrentRequests
     }
   });
 });
@@ -150,4 +238,20 @@ app.listen(PORT, HOST, () => {
   console.log(`👤 User: ${smtpConfig.auth.user}`);
   console.log(`🔐 API Key: ${API_KEY.substring(0, 10)}...`);
   console.log(`🛡️ Rate Limit: 3 požadavků/5min na IP+email`);
+  
+  if (TRAFFIC_PROTECTION.enabled) {
+    console.log(`🛡️ Traffic Protection: POVOLENO`);
+    console.log(`   - Max současných požadavků: ${TRAFFIC_PROTECTION.maxConcurrentRequests}`);
+    console.log(`   - Timeout: ${TRAFFIC_PROTECTION.requestTimeout}ms`);
+    console.log(`   - Retry pokusů: ${TRAFFIC_PROTECTION.retryAttempts}`);
+    if (TRAFFIC_PROTECTION.throttleEnabled) {
+      console.log(`   - Throttling: ${TRAFFIC_PROTECTION.throttleDelay}ms`);
+    }
+  } else {
+    console.log(`🛡️ Traffic Protection: VYPNOUTO`);
+  }
+  
+  if (smtpConfig.pool) {
+    console.log(`🔗 SMTP Pool: ${smtpConfig.maxConnections} připojení`);
+  }
 }); 

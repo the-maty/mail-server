@@ -1,6 +1,6 @@
-#  Email Server
+# ReMeds Email Server
 
-Bezpečný Node.js email server pro 2FA verifikaci v  aplikaci.
+Bezpečný Node.js email server pro 2FA verifikaci v ReMeds aplikaci.
 
 ## Funkce
 
@@ -11,6 +11,9 @@ Bezpečný Node.js email server pro 2FA verifikaci v  aplikaci.
 - ✅ **Health check endpoint** pro monitoring
 - ✅ **Bezpečnostní headers** a ochrana proti útokům
 - ✅ **Automatický deployment script** pro VPS
+- ✅ **Traffic protection** proti vysoké zátěži (volitelné)
+- ✅ **SMTP connection pooling** pro lepší výkon
+- ✅ **Retry mechanismus** pro spolehlivost
 
 ## Instalace
 
@@ -40,6 +43,13 @@ SMTP_USER=mail@gmail.com
 SMTP_PASS="p a s s w o r d"
 SMTP_REJECT_UNAUTHORIZED=true
 
+# SMTP Performance & Protection
+SMTP_POOL=true
+SMTP_MAX_CONNECTIONS=5
+SMTP_MAX_MESSAGES=100
+SMTP_RATE_LIMIT=20
+SMTP_RATE_DELTA=1000
+
 # Deployment Configuration
 DOMAIN=api.domain.com
 VPS_USER=user
@@ -52,6 +62,15 @@ HOST=127.0.0.1
 # Security
 API_KEY=2FA-API-KEY
 NODE_ENV=production
+
+# Traffic Protection (vypnuto ve výchozím stavu)
+TRAFFIC_PROTECTION=false
+MAX_CONCURRENT_REQUESTS=10
+REQUEST_TIMEOUT=30000
+RETRY_ATTEMPTS=3
+RETRY_DELAY=1000
+THROTTLE_ENABLED=false
+THROTTLE_DELAY=100
 ```
 
 ### 3. Gmail App Password
@@ -62,7 +81,7 @@ Pro Gmail SMTP potřebujete app password:
 2. **Security** → **2-Step Verification** (musí být zapnuté)
 3. **App passwords** → **Generate**
 4. Vyberte **Mail** a **Other (Custom name)**
-5. Zadejte název: `Email Server`
+5. Zadejte název: `ReMeds Email Server`
 6. **Generate** - dostanete 16místný kód
 
 ### 4. API Key
@@ -72,6 +91,18 @@ Vygenerujte bezpečný API klíč pro autentifikaci:
 ```bash
 # Vygenerujte náhodný klíč
 openssl rand -hex 32
+```
+
+### 5. Traffic Protection (volitelné)
+
+Pro vysokou zátěž můžete povolit dodatečné ochrany:
+
+```env
+# Povolení traffic protection
+TRAFFIC_PROTECTION=true
+MAX_CONCURRENT_REQUESTS=20
+REQUEST_TIMEOUT=30000
+RETRY_ATTEMPTS=5
 ```
 
 ## Spuštění
@@ -89,7 +120,7 @@ Server se spustí na `http://127.0.0.1:3000` (lokální přístup).
 ## API Endpoints
 
 ### POST /send-email
-Odešle verifikační email s brandingem.
+Odešle verifikační email s ReMeds brandingem.
 
 **Headers:**
 ```
@@ -103,7 +134,7 @@ Content-Type: application/json
   "to": "user@example.com",
   "subject": "Verifikační kód",
   "code": "123456",
-  "from": "Team" // volitelné
+  "from": "ReMeds Team" // volitelné
 }
 ```
 
@@ -128,11 +159,16 @@ Health check endpoint pro monitoring (bez API Key).
   "smtp": {
     "host": "smtp.gmail.com",
     "port": 587,
-    "user": "mail@gmail.com"
+    "user": "mail@gmail.com",
+    "pool": true,
+    "maxConnections": 5
   },
   "security": {
     "rateLimitEnabled": true,
-    "apiKeyRequired": true
+    "apiKeyRequired": true,
+    "trafficProtection": false,
+    "activeRequests": 0,
+    "maxConcurrentRequests": 10
   }
 }
 ```
@@ -140,10 +176,32 @@ Health check endpoint pro monitoring (bez API Key).
 ## Email Template
 
 Server automaticky generuje krásný HTML email s:
-- brandingem
+- ReMeds brandingem
 - Velkým verifikačním kódem
 - Informací o 5minutové platnosti
 - Bezpečnostním varováním
+
+## Traffic Protection
+
+### Kdy povolit:
+- Při vysoké zátěži (více než 10 současných uživatelů)
+- Když chcete chránit SMTP server před přetížením
+- Pro lepší stabilitu při špičkách
+
+### Funkce:
+- **Max současných požadavků** - omezuje počet současně zpracovávaných emailů
+- **Request timeout** - automatické ukončení dlouhých požadavků
+- **Retry mechanismus** - automatické opakování při SMTP selhání
+- **Throttling** - umělé zpomalení pro rovnoměrné rozložení zátěže
+
+### Nastavení pro vysokou zátěž:
+```env
+TRAFFIC_PROTECTION=true
+MAX_CONCURRENT_REQUESTS=20
+THROTTLE_ENABLED=true
+THROTTLE_DELAY=50
+RETRY_ATTEMPTS=5
+```
 
 ## Deployment na VPS
 
@@ -224,6 +282,8 @@ server {
 - ✅ **Security headers**
 - ✅ **CORS ochrana**
 - ✅ **TLS/SSL SMTP** s certifikátovou validací
+- ✅ **Traffic protection** proti DDoS a přetížení
+- ✅ **SMTP connection pooling** pro stabilitu
 
 ## Monitoring
 
@@ -245,6 +305,15 @@ pm2 restart email-server
 curl https://api.yourdomain.com/health
 ```
 
+### Traffic Protection Monitoring
+```bash
+# Sledování aktivních požadavků
+curl https://api.yourdomain.com/health | jq '.security.activeRequests'
+
+# Kontrola SMTP pool stavu
+curl https://api.yourdomain.com/health | jq '.smtp'
+```
+
 ## Troubleshooting
 
 ### Časté problémy
@@ -264,6 +333,14 @@ curl https://api.yourdomain.com/health
 4. **"Neplatný API klíč"**
    - Zkontrolujte X-API-Key header
    - Ověřte správnost klíče v `.env`
+
+5. **"Server je přetížený"**
+   - Traffic protection aktivní
+   - Zvýšte MAX_CONCURRENT_REQUESTS nebo vypněte TRAFFIC_PROTECTION
+
+6. **"SMTP selhal, opakuji"**
+   - Retry mechanismus funguje
+   - Kontrolujte Gmail limity a připojení
 
 ### Logy
 ```bash
