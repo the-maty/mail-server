@@ -1,6 +1,6 @@
-# ReMeds Email Server
+#  Email Server
 
-Bezpečný Node.js email server pro 2FA verifikaci v ReMeds aplikaci.
+Bezpečný Node.js email server pro 2FA verifikaci v  aplikaci.
 
 ## Funkce
 
@@ -62,7 +62,7 @@ Pro Gmail SMTP potřebujete app password:
 2. **Security** → **2-Step Verification** (musí být zapnuté)
 3. **App passwords** → **Generate**
 4. Vyberte **Mail** a **Other (Custom name)**
-5. Zadejte název: `ReMeds Email Server`
+5. Zadejte název: `Email Server`
 6. **Generate** - dostanete 16místný kód
 
 ### 4. API Key
@@ -89,7 +89,7 @@ Server se spustí na `http://127.0.0.1:3000` (lokální přístup).
 ## API Endpoints
 
 ### POST /send-email
-Odešle verifikační email s ReMeds brandingem.
+Odešle verifikační email s brandingem.
 
 **Headers:**
 ```
@@ -103,7 +103,7 @@ Content-Type: application/json
   "to": "user@example.com",
   "subject": "Verifikační kód",
   "code": "123456",
-  "from": "ReMeds Team" // volitelné
+  "from": "Team" // volitelné
 }
 ```
 
@@ -140,7 +140,7 @@ Health check endpoint pro monitoring (bez API Key).
 ## Email Template
 
 Server automaticky generuje krásný HTML email s:
-- ReMeds brandingem
+- brandingem
 - Velkým verifikačním kódem
 - Informací o 5minutové platnosti
 - Bezpečnostním varováním
